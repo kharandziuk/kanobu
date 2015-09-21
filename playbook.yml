@@ -1,0 +1,49 @@
+# -*- mode: yaml-*-
+# vi: set ft=yaml sw=2 ts=2 :
+
+- name: Configure development machine
+  hosts: all
+  vars:
+    project_dir: /opt/project/
+    project_name: polls
+  sudo: True
+  tasks:
+    - name: set locale
+      lineinfile: dest=/etc/default/locale line="LC_ALL=C"
+
+    - name: install dependencies
+      apt: name={{ item }} update_cache=yes
+      with_items:
+        - git
+        - curl
+        - postgresql 
+        - postgresql-contrib
+        - libpq-dev
+        - python-dev
+        - python-psycopg2
+
+    - name: install pip
+      shell: curl https://bootstrap.pypa.io/get-pip.py | python -
+
+    - pip: name=virtualenv
+
+    #- pip: requirements={{project_dir}}requirements.pip virtualenv=/ENV
+
+    - name: create new role 
+      sudo_user: postgres
+      postgresql_user: name={{project_name}} password={{project_name}}
+
+    - name: create new db
+      sudo_user: postgres
+      postgresql_db: name={{ project_name }}
+                     encoding='UTF-8'
+                     lc_collate='en_US.utf-8'
+                     lc_ctype='en_US.utf-8'
+                     template='template0'
+                     owner={{ project_name }}
+
+    - name: change working directory
+      lineinfile: dest=/home/vagrant/.bashrc line='cd {{project_dir}}'
+
+    - name: set default environment
+      lineinfile: dest=/home/vagrant/.bashrc line='source /ENV/bin/activate'
