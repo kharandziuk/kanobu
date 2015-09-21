@@ -10,5 +10,5 @@ from core import views
 PREFIX = ''
 urlpatterns = patterns(
     PREFIX,
-    url(r'^$', views.TestView.as_view(), name='test'),
+    url(r'^$', views.IndexView.as_view(), name='test'),
 ) + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

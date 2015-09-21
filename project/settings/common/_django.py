@@ -1,9 +1,10 @@
 import sys
 from pathlib import Path
 
-
-PROJECT_DIR = Path(__file__).parents[3]
-sys.path.append(PROJECT_DIR / 'apps')
+PROJECT_DIR = Path(__file__).parents[2]
+sys.path.append(
+    str(PROJECT_DIR / 'apps')
+)
 
 PUBLIC_DIR = PROJECT_DIR.parent / 'public'
 
@@ -86,7 +87,7 @@ ROOT_URLCONF = 'urls'
 WSGI_APPLICATION = 'wsgi.application'
 
 TEMPLATE_DIRS = [
-    PROJECT_DIR / 'templates'
+    str(PROJECT_DIR / 'templates')
 ]
 
 LOGGING = {
