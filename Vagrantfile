@@ -6,7 +6,7 @@ VAGRANTFILE_API_VERSION = "2"
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box = "ubuntu/trusty64"
-  #config.vm.synced_folder "./project/", "/opt/project/"
+  config.vm.synced_folder "./project/", "/opt/project/"
   config.vm.network "forwarded_port", guest: 8000, host: 8001
   #config.vm.network :public_network, bridge: 'eth0'
   config.vm.provider :virtualbox do |vb|
