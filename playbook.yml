@@ -4,8 +4,24 @@
 - name: Configure development machine
   hosts: all
   vars:
-    project_dir: /opt/project/
     project_name: polls
+    application_name: '{{ project_name }}'
+    project_dir: /opt/project/
+    project_env_dir: '{{project_dir}}../env/'
+    project_log_dir: '{{project_dir}}log/'
+    application_log_file: '{{ project_log_dir }}gunicort_supervisor.log'
+    gunicorn_user: '{{ project_name }}'
+    gunicorn_group: webapps
+    gunicorn_num_workers: 1
+    gunicorn_max_requests: 0
+    # Nginx settings
+    nginx_server_name: "some_name"
+    nginx_http_port: 80
+    nginx_https_port: 443
+    nginx_access_log_file: "{{ project_log_dir }}/nginx_access.log"
+    nginx_error_log_file: "{{ project_log_dir }}/nginx_error.log"
+    nginx_static_dir: "{{ project_env_dir }}/static/"
+    nginx_media_dir: "{{ project_env_dir }}/media/"
   sudo: True
   tasks:
     - name: set locale
@@ -21,6 +37,7 @@
         - libpq-dev
         - python-dev
         - python-psycopg2
+        - supervisor
 
     - name: install pip
       shell: curl https://bootstrap.pypa.io/get-pip.py | python -
@@ -28,7 +45,7 @@
     - name: install virtualenv
       pip: name=virtualenv
 
-    - pip: requirements={{project_dir}}requirements.pip virtualenv=/ENV
+    - pip: requirements={{project_dir}}requirements.pip virtualenv={{project_env_dir}}
 
     - name: create new role 
       sudo_user: postgres
@@ -54,4 +71,122 @@
         - 'DB_PASS={{ project_name }}'
 
     - name: set default environment
-      lineinfile: dest=/home/vagrant/.bashrc line='source /ENV/bin/activate'
+      lineinfile: dest=/home/vagrant/.bashrc line='source {{ project_env_dir }}bin/activate'
+
+
+    - name: Create the application user
+      user: name={{ gunicorn_user }} state=present
+
+    - name: Create the application group
+      group: name={{ gunicorn_group }} system=yes state=present
+
+    - name: Add the application user to the application group
+      user: name={{ gunicorn_user }} group={{ gunicorn_group }} state=present
+
+    - name: Ensure that the application file permissions are set properly
+      file: path={{ project_env_dir }}
+            recurse=yes
+            owner={{ gunicorn_user }}
+            group={{ gunicorn_group }}
+            state=directory
+            mode=0777
+      notify: restart application
+
+    - name: Install Nginx
+      apt: name=nginx update_cache=yes state=installed
+      tags: packages
+
+    #- name: Copy the SSL certificate to the remote server
+    #  copy: content="{{ ssl_crt }}" dest={{ ssl_dest_dir }}/{{ project_name }}.crt
+    #  notify: restart nginx
+
+    #- name: Copy the SSL private key to the remote server
+    #  copy: content="{{ ssl_key }}" dest={{ ssl_dest_dir }}/{{ project_name }}.key
+    #  notify: restart nginx
+
+    - name: Create the Nginx configuration file
+      template: src=nginx_site_config.j2
+                dest=/etc/nginx/sites-available/{{ project_name }}
+                backup=yes
+      notify: reload nginx
+
+    - name: Ensure that the default site is disabled
+      command: rm /etc/nginx/sites-enabled/default
+               removes=/etc/nginx/sites-enabled/default
+      notify: reload nginx
+
+    - name: Ensure that the application site is enabled
+      command: ln -s /etc/nginx/sites-available/{{ project_name }}
+               /etc/nginx/sites-enabled/{{ project_name }}
+               creates=/etc/nginx/sites-enabled/{{ project_name }}
+      notify: reload nginx
+
+    - name: Ensure Nginx service is started
+      service: name=nginx state=started enabled=yes
+
+
+    - name: Ensure gunicorn is installed
+      pip: virtualenv={{ project_env_dir }} name=gunicorn 
+
+    - name: Create the Gunicorn script file
+      template: src=gunicorn_start.j2
+                dest={{ project_env_dir }}bin/gunicorn_start
+                owner={{ gunicorn_user }}
+                group={{ gunicorn_group }}
+                mode=0755
+                backup=yes
+      tags: deploy
+
+    - name: Create the application log folder
+      file: path={{ project_log_dir }}
+            owner={{ gunicorn_user }}
+            group={{ gunicorn_group }}
+            mode=0774
+            state=directory
+
+    - name: Create the application log file
+      command: touch {{ application_log_file }}
+               creates={{ application_log_file }}
+
+    #- name: Create the virtualenv postactivate script to set environment variables
+    #  template: src=virtualenv_postactivate.j2
+    #            dest={{ project_env_dir }}/bin/postactivate
+    #            owner={{ gunicorn_user }}
+    #            group={{ gunicorn_group }}
+    #            mode=0640
+    #            backup=yes
+    #  tags: deploy
+
+    #- name: Set permission to the application log file
+    #  file: path={{ application_log_file }}
+    #        owner={{ gunicorn_user }}
+    #        group={{ gunicorn_group }}
+    #        mode=0664
+    #        state=file
+
+    #- name: Create the maintenance page
+    #  template: src=maintenance_off.html
+    #            dest={{ project_env_dir }}/maintenance_off.html
+    #            mode=0664
+
+    - name: Create the Supervisor config file
+      template: src=supervisor_config.j2
+                dest=/etc/supervisor/conf.d/{{ project_name }}.conf
+                backup=yes
+
+    - name: Re-read the Supervisor config files
+      supervisorctl: name={{ project_name }} state=present
+
+    - name: Restart Supervisor
+      supervisorctl: name={{ project_name }} state=restarted
+
+  handlers:
+
+    - name: restart application
+      supervisorctl: name={{ application_name }} state=restarted
+
+    - name: restart nginx
+      service: name=nginx state=restarted enabled=yes
+
+    - name: reload nginx
+      service: name=nginx state=reloaded
