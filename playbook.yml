@@ -45,7 +45,12 @@
     - name: install virtualenv
       pip: name=virtualenv
 
-    - pip: requirements={{project_dir}}requirements.pip virtualenv={{project_env_dir}}
+    - name: install application
+      pip: 
+        name='git+https://github.com/kharandziuk/to-be-changed.git#egg=Package' 
+        virtualenv={{ project_env_dir }}
+
+    #- pip: requirements={{project_dir}}requirements.pip virtualenv={{project_env_dir}}
 
     - name: create new role 
       sudo_user: postgres
